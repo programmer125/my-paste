@@ -1,45 +1,27 @@
 import AppKit
-import ApplicationServices
 import Foundation
 
 protocol PasteExecutor {
-    func paste(text: String) throws
+    func copy(text: String) throws
 }
 
 enum PasteError: LocalizedError {
-    case accessibilityPermissionRequired
-    case eventCreationFailed
+    case copyFailed
 
     var errorDescription: String? {
         switch self {
-        case .accessibilityPermissionRequired:
-            return "需要无障碍权限后才能自动执行粘贴。"
-        case .eventCreationFailed:
-            return "系统粘贴事件创建失败。"
+        case .copyFailed:
+            return "复制到剪贴板失败。"
         }
     }
 }
 
 final class DefaultPasteExecutor: PasteExecutor {
-    func paste(text: String) throws {
-        guard AXIsProcessTrusted() else {
-            throw PasteError.accessibilityPermissionRequired
-        }
-
+    func copy(text: String) throws {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
-            throw PasteError.eventCreationFailed
+        if !pasteboard.setString(text, forType: .string) {
+            throw PasteError.copyFailed
         }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
     }
 }

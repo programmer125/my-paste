@@ -8,7 +8,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var maxItems: Int
     public var launchAtLogin: Bool
 
-    public init(hotkey: Hotkey = .defaultHotkey, maxItems: Int = 200, launchAtLogin: Bool = true) {
+    public init(hotkey: Hotkey = .defaultHotkey, maxItems: Int = 100, launchAtLogin: Bool = true) {
         self.hotkey = hotkey
         self.maxItems = Self.clampedMaxItems(maxItems)
         self.launchAtLogin = launchAtLogin

@@ -27,6 +27,10 @@ let package = Package(
         .testTarget(
             name: "ClipboardCoreTests",
             dependencies: ["ClipboardCore"]
+        ),
+        .testTarget(
+            name: "ClipboardMenuTests",
+            dependencies: ["ClipboardMenu", "ClipboardCore"]
         )
     ]
 )

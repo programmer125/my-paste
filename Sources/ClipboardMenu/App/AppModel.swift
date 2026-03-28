@@ -52,6 +52,9 @@ final class AppModel: ObservableObject {
         self.popupController.onError = { [weak self] message in
             self?.errorMessage = message
         }
+        self.popupController.onUpdateNote = { [weak self] itemID, note in
+            self?.updateHistoryNote(itemID: itemID, note: note)
+        }
 
         _ = historyStore.load()
         self.historyItems = historyStore.items()
@@ -74,11 +77,13 @@ final class AppModel: ObservableObject {
 
     func stop() {
         clipboardMonitor.stop()
+        historyStore.flush()
         hotkeyManager.unregister()
         started = false
     }
 
     func showHistoryPopup() {
+        clipboardMonitor.pokeActivity()
         popupController.show()
     }
 
@@ -155,6 +160,11 @@ final class AppModel: ObservableObject {
 
     private func reloadHistory() {
         historyItems = historyStore.items()
+    }
+
+    private func updateHistoryNote(itemID: UUID, note: String?) {
+        historyStore.updateNote(itemID: itemID, note: note)
+        reloadHistory()
     }
 
     private static func historyFileURL() -> URL {

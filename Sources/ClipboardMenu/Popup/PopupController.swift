@@ -7,15 +7,18 @@ import SwiftUI
 final class PopupController {
     typealias HistoryProvider = () -> [ClipboardItem]
     typealias ErrorHandler = (String) -> Void
+    typealias NoteUpdateHandler = (UUID, String?) -> Void
 
     private let caretLocator: CaretLocator
     private let pasteExecutor: PasteExecutor
     private let historyProvider: HistoryProvider
     var onError: ErrorHandler
+    var onUpdateNote: NoteUpdateHandler
 
     private let viewModel = PopupViewModel()
 
     private var panel: HistoryPanel?
+    private var hostingView: NSHostingView<PopupView>?
 
     init(
         caretLocator: CaretLocator,
@@ -27,6 +30,7 @@ final class PopupController {
         self.pasteExecutor = pasteExecutor
         self.historyProvider = historyProvider
         self.onError = onError
+        self.onUpdateNote = { _, _ in }
     }
 
     func show() {
@@ -36,15 +40,8 @@ final class PopupController {
             return
         }
 
-        viewModel.setItems(items)
-
-        if panel == nil {
-            panel = makePanel()
-        }
-
-        guard let panel else { return }
-
-        panel.contentView = NSHostingView(rootView: PopupView(viewModel: viewModel))
+        viewModel.loadForDisplay(items)
+        let panel = ensurePanel()
 
         let origin = preferredOrigin(for: panel.frame.size)
         panel.setFrameOrigin(origin)
@@ -53,7 +50,29 @@ final class PopupController {
     }
 
     func hide() {
+        viewModel.prepareForDismissal()
         panel?.orderOut(nil)
+    }
+
+    private func ensurePanel() -> HistoryPanel {
+        if let panel {
+            return panel
+        }
+
+        let panel = makePanel()
+        let hostingView = NSHostingView(
+            rootView: PopupView(
+                viewModel: viewModel,
+                onSaveNote: { [weak self] itemID, note in
+                    self?.saveNote(itemID: itemID, note: note)
+                }
+            )
+        )
+        panel.contentView = hostingView
+
+        self.hostingView = hostingView
+        self.panel = panel
+        return panel
     }
 
     private func makePanel() -> HistoryPanel {
@@ -75,32 +94,54 @@ final class PopupController {
         panel.titlebarAppearsTransparent = true
 
         panel.keyDownHandler = { [weak self] event in
-            self?.handleKey(event)
+            self?.handleKey(event) ?? false
         }
 
         return panel
     }
 
-    private func handleKey(_ event: NSEvent) {
+    private func handleKey(_ event: NSEvent) -> Bool {
         switch event.keyCode {
         case 126:
             viewModel.moveSelectionUp()
+            return true
         case 125:
             viewModel.moveSelectionDown()
+            return true
         case 36, 76:
-            pasteSelection()
+            if viewModel.shouldHandleEnterAsSearchSubmit {
+                return false
+            }
+            if viewModel.isEditingNote {
+                if let commit = viewModel.commitEditingNote() {
+                    saveNote(itemID: commit.itemID, note: commit.note)
+                }
+            } else {
+                copySelectionAndClose()
+            }
+            return true
         case 53:
-            hide()
+            if viewModel.isEditingNote {
+                viewModel.cancelEditingNote()
+            } else {
+                hide()
+            }
+            return true
         default:
-            break
+            return false
         }
     }
 
-    private func pasteSelection() {
+    private func saveNote(itemID: UUID, note: String?) {
+        onUpdateNote(itemID, note)
+        viewModel.refreshItems(historyProvider())
+    }
+
+    private func copySelectionAndClose() {
         guard let item = viewModel.selectedItem else { return }
 
         do {
-            try pasteExecutor.paste(text: item.text)
+            try pasteExecutor.copy(text: item.text)
             hide()
         } catch {
             onError(error.localizedDescription)
